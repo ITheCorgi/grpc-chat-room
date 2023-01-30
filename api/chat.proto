@@ -1,0 +1,47 @@
+syntax = "proto3";
+package b2bchatapi;
+option go_package = ".;chat";
+
+import "validate/validate.proto";
+import "google/protobuf/empty.proto";
+
+service Chat {
+  rpc Connect (ConnectRequest) returns (stream ChatMessage);
+  rpc CreateGroupChat(GroupChannelNameRequest) returns (google.protobuf.Empty);
+  rpc JoinGroupChat(GroupChannelNameRequest) returns (google.protobuf.Empty);
+  rpc LeaveGroupChat(GroupChannelNameRequest) returns (google.protobuf.Empty);
+  rpc ListChannels(google.protobuf.Empty) returns (Channels);
+  rpc SendMessage(ChatMessage) returns (google.protobuf.Empty);
+}
+
+message ConnectRequest {
+  string username = 1 [(validate.rules).string.min_len = 1];
+}
+
+message GroupChannelNameRequest {
+  string group_channel_name = 1 [(validate.rules).string.min_len = 1];
+}
+
+message ChatMessage {
+  oneof destination {
+    string group_channel_name = 1 [(validate.rules).string.min_len = 1];
+    string username = 2 [(validate.rules).string.min_len = 1];
+  }
+
+  string message = 3 [(validate.rules).string.min_len = 1];
+}
+
+enum ChannelType {
+  UNSPECIFIED = 0;
+  USERNAME = 1;
+  GROUP = 2;
+}
+
+message Channels {
+  message Channel {
+    string group_channel_name = 1;
+    ChannelType type = 2;
+  }
+
+  repeated Channel items = 1;
+}
