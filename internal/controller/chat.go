@@ -3,8 +3,8 @@ package controller
 import (
 	"context"
 
-	"github.com/ITheCorgi/b2b-chat/internal/entity"
-	chatApi "github.com/ITheCorgi/b2b-chat/pkg/api"
+	"github.com/ITheCorgi/grpc-chat-room/internal/entity"
+	chatApi "github.com/ITheCorgi/grpc-chat-room/pkg/api"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"

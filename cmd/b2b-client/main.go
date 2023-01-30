@@ -13,7 +13,7 @@ import (
 	"strings"
 	"syscall"
 
-	chatApi "github.com/ITheCorgi/b2b-chat/pkg/api"
+	chatApi "github.com/ITheCorgi/grpc-chat-room/pkg/api"
 	"github.com/manifoldco/promptui"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

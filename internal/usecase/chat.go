@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/ITheCorgi/b2b-chat/internal/entity"
+	"github.com/ITheCorgi/grpc-chat-room/internal/entity"
 	"go.uber.org/zap"
 )
 

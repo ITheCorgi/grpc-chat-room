@@ -1,7 +1,7 @@
 package controller
 
 import (
-	chatApi "github.com/ITheCorgi/b2b-chat/pkg/api"
+	chatApi "github.com/ITheCorgi/grpc-chat-room/pkg/api"
 )
 
 type controller struct {

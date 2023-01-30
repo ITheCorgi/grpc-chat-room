@@ -4,8 +4,8 @@ import (
 	"flag"
 	"log"
 
-	"github.com/ITheCorgi/b2b-chat/internal/app"
-	"github.com/ITheCorgi/b2b-chat/internal/config"
+	"github.com/ITheCorgi/grpc-chat-room/internal/app"
+	"github.com/ITheCorgi/grpc-chat-room/internal/config"
 	"go.uber.org/zap"
 )
 

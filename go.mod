@@ -1,4 +1,4 @@
-module github.com/ITheCorgi/b2b-chat
+module github.com/ITheCorgi/grpc-chat-room
 
 go 1.19
 
