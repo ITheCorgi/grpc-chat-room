@@ -7,7 +7,7 @@ import (
 )
 
 type IChat interface {
-	Connect(ctx context.Context, userName string) error
+	Connect(ctx context.Context, userName string) (chan entity.Message, error)
 	CreateGroupChat(ctx context.Context, channelName, userName string) error
 	JoinGroupChat(ctx context.Context, channelName, userName string) error
 	LeaveGroupChat(ctx context.Context, channelName, userName string) error

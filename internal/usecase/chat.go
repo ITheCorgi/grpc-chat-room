@@ -7,7 +7,6 @@ import (
 
 	"github.com/ITheCorgi/b2b-chat/internal/entity"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -27,7 +26,7 @@ type (
 		channels map[string]*entity.Chatroom
 		// user_name <-> stream message
 		connPipe     map[string]chan entity.Message
-		withSafeFunc func(mu *sync.RWMutex, isForWrite entity.Lock, fn func() error) error
+		withSafeFunc func(mu *sync.RWMutex, safe entity.Lock, fn func() error) error
 	}
 )
 
@@ -38,8 +37,8 @@ func New(log *zap.Logger) *chat {
 		mu:       &sync.RWMutex{},
 		channels: make(map[string]*entity.Chatroom),
 		connPipe: make(map[string]chan entity.Message),
-		withSafeFunc: func(mu *sync.RWMutex, isForWrite entity.Lock, fn func() error) error {
-			if isForWrite == entity.SafeWrite {
+		withSafeFunc: func(mu *sync.RWMutex, safe entity.Lock, fn func() error) error {
+			if safe == entity.SafeWrite {
 				mu.Lock()
 				defer mu.Unlock()
 			} else {
@@ -56,37 +55,23 @@ func New(log *zap.Logger) *chat {
 	}
 }
 
-func (c *chat) Connect(ctx context.Context, userName string) error {
+// Connect establishes connection with server
+// returns stream of messages
+func (c *chat) Connect(ctx context.Context, userName string) (chan entity.Message, error) {
 	queue := make(chan entity.Message, 100)
+	if err := c.withSafeFunc(c.mu, entity.SafeWrite, func() error {
+		c.connPipe[userName] = queue
 
-	for {
-		select {
-		case <-ctx.Done():
-			c.log.Info("connection closed, disconnecting", zap.String("user_name", userName))
-
-			return nil
-
-		default:
-			if err := c.withSafeFunc(c.mu, entity.SafeWrite, func() error {
-				c.connPipe[userName] = queue
-
-				//chatroom, err := c.createAndSubscribe(userName, userName, entity.OneToOne)
-				//if err != nil {
-				//	return err
-				//}
-				//
-				//c.addChatRoom(chatroom)
-
-				return nil
-			}); err != nil {
-				c.log.Error("failed to create user chat", zap.Error(err))
-				return err
-			}
-
-		}
+		return nil
+	}); err != nil {
+		c.log.Error("failed to create user chat", zap.Error(err))
+		return nil, err
 	}
+
+	return queue, nil
 }
 
+// CreateGroupChat creates a group chat, in case there is one it returns an error
 func (c *chat) CreateGroupChat(ctx context.Context, channelName, userName string) error {
 	if err := c.withSafeFunc(c.mu, entity.SafeWrite, func() error {
 		if chatroom := c.isChatExist(channelName); chatroom != nil {
@@ -156,7 +141,7 @@ func (c *chat) LeaveGroupChat(ctx context.Context, channelName, userName string)
 }
 
 func (c *chat) ListChannels(ctx context.Context) (entity.Channels, error) {
-	res := make(entity.Channels, len(c.channels))
+	res := make(entity.Channels, 0, len(c.channels))
 
 	c.withSafeFunc(c.mu, entity.SafeRead, func() error {
 		for k := range c.channels {
@@ -174,46 +159,28 @@ func (c *chat) ListChannels(ctx context.Context) (entity.Channels, error) {
 
 func (c *chat) SendMessage(ctx context.Context, message entity.Message, userName string) error {
 	if err := c.withSafeFunc(c.mu, entity.SafeWrite, func() error {
-		var (
-			chatroom                 *entity.Chatroom
-			ch                       chan entity.Message
-			sentToRoom, sentToFriend bool
-		)
+		switch message.ChatType {
+		case entity.OneToOne:
+			quque, ok := c.connPipe[message.To]
+			if !ok {
+				return errUserNotFound
+			}
 
-		eg, _ := errgroup.WithContext(ctx)
+			message.To = userName
+			quque <- message
 
-		eg.Go(func() error {
-			chatroom = c.isChatExist(message.To)
+		case entity.OneToMany:
+			chatroom := c.isChatExist(message.To)
 			if chatroom == nil {
 				return nil
 			}
 
 			isBelongs := chatroom.IsSubscribed(userName)
 			if !isBelongs {
-				return nil
+				return errUserNotFound
 			}
 
 			c.distributeMessage(message, chatroom.GetSubscribers())
-			sentToRoom = true
-			return nil
-		})
-		eg.Go(func() error {
-			ch = c.isUserConnected(message.To)
-			if ch == nil {
-				return nil
-			}
-
-			c.distributeMessage(message, []string{message.To, userName})
-			sentToFriend = true
-			return nil
-		})
-		if err := eg.Wait(); err != nil {
-			return err
-		}
-
-		notFound := !sentToRoom && !sentToFriend
-		if notFound {
-			return errDestinationAddrDoesntExist
 		}
 
 		return nil
@@ -264,4 +231,17 @@ func (c *chat) isUserConnected(user string) chan entity.Message {
 
 func (c *chat) distributeMessage(msg entity.Message, subscribers []string) {
 
+	wg := &sync.WaitGroup{}
+	for _, subscriber := range subscribers {
+		wg.Add(1)
+		subscriber := subscriber
+		go func() {
+			ch, ok := c.connPipe[subscriber]
+			if !ok {
+
+			}
+
+			ch <- msg
+		}()
+	}
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/signal"
@@ -23,7 +24,7 @@ func Run(cfg *config.Config, log *zap.Logger) {
 
 	grpcServer := grpc.NewServer()
 
-	listener, err := net.Listen("tcp", cfg.App.Port)
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.App.Port))
 	if err != nil {
 		log.Fatal("error creating tcp listener", zap.Error(err))
 	}
@@ -31,7 +32,7 @@ func Run(cfg *config.Config, log *zap.Logger) {
 	chat := controller.New(usecase.New(log))
 
 	chatApi.RegisterChatServer(grpcServer, chat)
-	grpcServer.Serve(listener)
+	go grpcServer.Serve(listener)
 
 	log.Info("http service started", zap.String("host", cfg.App.Host), zap.String("port", cfg.App.Port))
 

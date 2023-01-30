@@ -1,6 +1,6 @@
 package entity
 
 const (
-	OneToMany uint8 = iota + 1
-	OneToOne
+	OneToOne uint8 = iota + 1
+	OneToMany
 )
