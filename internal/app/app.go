@@ -12,8 +12,12 @@ import (
 	"github.com/ITheCorgi/b2b-chat/internal/controller"
 	"github.com/ITheCorgi/b2b-chat/internal/usecase"
 	chatApi "github.com/ITheCorgi/b2b-chat/pkg/api"
+	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
+	recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func Run(cfg *config.Config, log *zap.Logger) {
@@ -22,7 +26,16 @@ func Run(cfg *config.Config, log *zap.Logger) {
 
 	_, cancelFunc := context.WithCancel(context.Background())
 
-	grpcServer := grpc.NewServer()
+	opts := []recovery.Option{
+		recovery.WithRecoveryHandler(func(p interface{}) (err error) {
+			return status.Errorf(codes.Internal, "panic triggered: %v", p)
+		}),
+	}
+
+	grpcServer := grpc.NewServer(
+		middleware.WithUnaryServerChain(recovery.UnaryServerInterceptor(opts...)),
+		middleware.WithStreamServerChain(recovery.StreamServerInterceptor(opts...)),
+	)
 
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%s", cfg.App.Port))
 	if err != nil {

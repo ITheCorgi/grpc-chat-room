@@ -22,10 +22,11 @@ type (
 		log *zap.Logger
 
 		mu *sync.RWMutex
-		// channel_name <-> channel
+		// channels keeps a list of active chat rooms (map[chat_name]chat
 		channels map[string]*entity.Chatroom
-		// user_name <-> stream message
-		connPipe     map[string]chan entity.Message
+		// connPipe is a pool of client grpc connections (map[user_name]stream queue)
+		connPipe map[string]chan entity.Message
+		// withSafeFunc provides goroutine safe access to pool and channel list
 		withSafeFunc func(mu *sync.RWMutex, safe entity.Lock, fn func() error) error
 	}
 )
@@ -38,12 +39,13 @@ func New(log *zap.Logger) *chat {
 		channels: make(map[string]*entity.Chatroom),
 		connPipe: make(map[string]chan entity.Message),
 		withSafeFunc: func(mu *sync.RWMutex, safe entity.Lock, fn func() error) error {
-			if safe == entity.SafeWrite {
-				mu.Lock()
-				defer mu.Unlock()
-			} else {
+			switch safe {
+			case entity.SafeRead:
 				mu.RLock()
 				defer mu.RUnlock()
+			default:
+				mu.Lock()
+				defer mu.Unlock()
 			}
 
 			if err := fn(); err != nil {
@@ -55,8 +57,7 @@ func New(log *zap.Logger) *chat {
 	}
 }
 
-// Connect establishes connection with server
-// returns stream of messages
+// Connect establishes connection with server, returns stream of messages
 func (c *chat) Connect(ctx context.Context, userName string) (chan entity.Message, error) {
 	queue := make(chan entity.Message, 100)
 	if err := c.withSafeFunc(c.mu, entity.SafeWrite, func() error {
@@ -94,6 +95,7 @@ func (c *chat) CreateGroupChat(ctx context.Context, channelName, userName string
 	return ctx.Err()
 }
 
+// JoinGroupChat checks whether chat exists, then subscribes user to chat room
 func (c *chat) JoinGroupChat(ctx context.Context, channelName, userName string) error {
 	if err := c.withSafeFunc(c.mu, entity.SafeRead, func() error {
 		channel := c.isChatExist(channelName)
@@ -115,6 +117,7 @@ func (c *chat) JoinGroupChat(ctx context.Context, channelName, userName string) 
 	return ctx.Err()
 }
 
+// LeaveGroupChat checks chat for existing, then unsubscribes user from chat
 func (c *chat) LeaveGroupChat(ctx context.Context, channelName, userName string) error {
 	if err := c.withSafeFunc(c.mu, entity.SafeWrite, func() error {
 		channel := c.isChatExist(channelName)
@@ -140,10 +143,11 @@ func (c *chat) LeaveGroupChat(ctx context.Context, channelName, userName string)
 	return ctx.Err()
 }
 
+// ListChannels provides a list of existing chat rooms
 func (c *chat) ListChannels(ctx context.Context) (entity.Channels, error) {
 	res := make(entity.Channels, 0, len(c.channels))
 
-	c.withSafeFunc(c.mu, entity.SafeRead, func() error {
+	err := c.withSafeFunc(c.mu, entity.SafeRead, func() error {
 		for k := range c.channels {
 			res = append(res, entity.Channel{
 				Name: c.channels[k].Name,
@@ -153,21 +157,25 @@ func (c *chat) ListChannels(ctx context.Context) (entity.Channels, error) {
 
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	return res, ctx.Err()
 }
 
+// SendMessage pushes a message to private or public chats
 func (c *chat) SendMessage(ctx context.Context, message entity.Message, userName string) error {
 	if err := c.withSafeFunc(c.mu, entity.SafeWrite, func() error {
 		switch message.ChatType {
 		case entity.OneToOne:
-			quque, ok := c.connPipe[message.To]
+			queue, ok := c.connPipe[message.To]
 			if !ok {
 				return errUserNotFound
 			}
 
 			message.To = userName
-			quque <- message
+			queue <- message
 
 		case entity.OneToMany:
 			chatroom := c.isChatExist(message.To)
@@ -230,18 +238,16 @@ func (c *chat) isUserConnected(user string) chan entity.Message {
 }
 
 func (c *chat) distributeMessage(msg entity.Message, subscribers []string) {
-
 	wg := &sync.WaitGroup{}
 	for _, subscriber := range subscribers {
 		wg.Add(1)
-		subscriber := subscriber
-		go func() {
+		go func(subscriber string) {
 			ch, ok := c.connPipe[subscriber]
 			if !ok {
-
+				c.log.Error("failed to send message", zap.String("subscriber", subscriber))
 			}
 
 			ch <- msg
-		}()
+		}(subscriber)
 	}
 }

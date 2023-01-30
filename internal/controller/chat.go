@@ -4,22 +4,12 @@ import (
 	"context"
 
 	"github.com/ITheCorgi/b2b-chat/internal/entity"
-	"github.com/ITheCorgi/b2b-chat/internal/usecase"
 	chatApi "github.com/ITheCorgi/b2b-chat/pkg/api"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
-
-type controller struct {
-	chatApi.UnimplementedChatServer
-	chat usecase.IChat
-}
-
-func New(chatService usecase.IChat) controller {
-	return controller{chat: chatService}
-}
 
 func (c controller) Connect(req *chatApi.ConnectRequest, stream chatApi.Chat_ConnectServer) error {
 	if err := req.Validate(); err != nil {

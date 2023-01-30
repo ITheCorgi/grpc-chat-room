@@ -1,0 +1,11 @@
+version: "3.8"
+services:
+  b2b-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: "b2b-chat:latest"
+    ports:
+      - "8270:8270"
+    expose:
+      - 8270

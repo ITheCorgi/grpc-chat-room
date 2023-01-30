@@ -1,3 +1,6 @@
+//go:build unit_tests
+// +build unit_tests
+
 package entity
 
 import "testing"
@@ -50,7 +53,7 @@ func Test_AddSubscriber(t *testing.T) {
 			t.Errorf("expected and actual types are different: exp: %v, act: %v", exp, act)
 		}
 
-		subscriber := "subscriber1"
+		const subscriber = "subscriber1"
 		isSucceed := c.room[info.Name].AddSubscriber(subscriber)
 		if !isSucceed {
 			t.Error("failed to add subscriber")

@@ -9,87 +9,94 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
-	"github.com/ITheCorgi/b2b-chat/internal/config"
 	chatApi "github.com/ITheCorgi/b2b-chat/pkg/api"
-	"github.com/nexidian/gocliselect"
+	"github.com/manifoldco/promptui"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 var (
-	configPath, user string
+	port, user string
 )
 
 func init() {
-	flag.StringVar(&configPath, "config", "config.yaml", "--config ./file_name.yaml")
-	flag.StringVar(&user, "u", "testuser", "--u testuser123")
+	flag.StringVar(&port, "port", "8270", "--port 6666")
+	flag.StringVar(&user, "user", "testuser", "--user testuser123")
 }
 
 func main() {
-	cfg, err := config.New(configPath)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+
+	conn, err := grpc.Dial(fmt.Sprintf(":%s", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	conn, err := grpc.Dial(fmt.Sprintf("%s:%s", cfg.App.Host, cfg.App.Port), grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Fatalln(err)
-	}
+	log.Println("grpc conn established")
 
 	chatClient := chatApi.NewChatClient(conn)
 
-	err = receive(chatClient)
-	if err != nil {
-		log.Fatalln(err)
+	go func() {
+		err = receive(ctx, chatClient)
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}()
+
+	md := metadata.New(map[string]string{"authorization": user})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	menu := promptui.Select{
+		Label: "choose an action",
+		Items: []string{"Create chat group", "Join chat group", "Join chat group", "Leave chat group", "Get list of channels", "Send Message"},
 	}
 
-	menu := gocliselect.NewMenu("choose an action")
-	menu.AddItem("Create chat group", "1")
-	menu.AddItem("Join chat group", "2")
-	menu.AddItem("Leave chat group", "3")
-	menu.AddItem("Get list of channels", "4")
-	menu.AddItem("Send Message", "5")
-
 	for {
-		choice := menu.Display()
+		idx, _, err := menu.Run()
 
-		switch choice {
-		case "1":
+		switch idx {
+		case 0:
 			reader := bufio.NewReader(os.Stdin)
 			fmt.Print("enter chat group name: ")
 			chatName, _ := reader.ReadString('\n')
 
-			_, err := chatClient.CreateGroupChat(context.Background(), &chatApi.GroupChannelNameRequest{GroupChannelName: chatName})
+			_, err := chatClient.CreateGroupChat(ctx, &chatApi.GroupChannelNameRequest{GroupChannelName: chatName})
 			if err != nil {
 				log.Println(err)
 			}
-		case "2":
+		case 1:
 			reader := bufio.NewReader(os.Stdin)
 			fmt.Print("enter chat group name: ")
 			chatName, _ := reader.ReadString('\n')
 
-			_, err := chatClient.JoinGroupChat(context.Background(), &chatApi.GroupChannelNameRequest{GroupChannelName: chatName})
+			_, err := chatClient.JoinGroupChat(ctx, &chatApi.GroupChannelNameRequest{GroupChannelName: chatName})
 			if err != nil {
 				log.Println(err)
 			}
-		case "3":
+		case 2:
 			reader := bufio.NewReader(os.Stdin)
 			fmt.Print("enter chat group name: ")
 			chatName, _ := reader.ReadString('\n')
 
-			_, err := chatClient.LeaveGroupChat(context.Background(), &chatApi.GroupChannelNameRequest{GroupChannelName: chatName})
+			_, err := chatClient.LeaveGroupChat(ctx, &chatApi.GroupChannelNameRequest{GroupChannelName: chatName})
 			if err != nil {
 				log.Println(err)
 			}
-		case "4":
-			_, err = chatClient.ListChannels(context.Background(), &emptypb.Empty{})
+		case 3:
+			_, err = chatClient.ListChannels(ctx, &emptypb.Empty{})
 			if err != nil {
 				log.Println(err)
 			}
-		case "5":
+		case 4:
 			reader := bufio.NewReader(os.Stdin)
 			fmt.Print("enter destination name, to user or group chat (1 or 2) and message. Each 3 must be separated ',': ")
 			input, _ := reader.ReadString('\n')
@@ -109,9 +116,13 @@ func main() {
 			}
 		}
 	}
+
+	<-sigChan
+	log.Println("start graceful shutdown, caught sig")
+	cancelFunc()
 }
 
-func receive(client chatApi.ChatClient) error {
+func receive(ctx context.Context, client chatApi.ChatClient) error {
 	stream, err := client.Connect(context.Background(), &chatApi.ConnectRequest{
 		Username: user,
 	})
@@ -136,7 +147,6 @@ func receive(client chatApi.ChatClient) error {
 		}
 	}(stream)
 
-	stream.CloseSend()
 	<-done
 	return nil
 }
