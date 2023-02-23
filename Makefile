@@ -1,10 +1,10 @@
 IMPORTS_DIR=./plugins
 API_SRC_DIR=./api
 GEN_DST_DIR=./pkg/api
-SERVER_DIR_NAME = b2b-chat
-SERVER_BINARY_NAME = b2b-chat
-CLIENT_DIR_NAME = b2b-client
-CLIENT_BINARY_NAME = b2b-client
+SERVER_DIR_NAME = server
+SERVER_BINARY_NAME = server
+CLIENT_DIR_NAME = client
+CLIENT_BINARY_NAME = client
 CURRENT_PATH=$(shell pwd)
 
 .PHONY: api

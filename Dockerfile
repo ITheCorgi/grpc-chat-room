@@ -5,7 +5,7 @@ ENV GOOS linux
 WORKDIR /build
 COPY ./ /build
 RUN go mod download
-RUN go build -ldflags="-s -w" -o b2b-chat /build/cmd/b2b-chat/main.go
+RUN go build -ldflags="-s -w" -o server /build/cmd/server/main.go
 
 FROM alpine
 RUN apk --no-cache add ca-certificates

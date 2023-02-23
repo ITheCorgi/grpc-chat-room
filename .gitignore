@@ -1,4 +1,5 @@
 .idea
-./b2b-chat
-/b2b-client.exe
-/b2b-server.exe
+/server.exe
+/client.exe
+/server
+/client

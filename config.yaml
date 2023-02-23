@@ -1,5 +1,5 @@
 app:
   port: 8270
   host: localhost
-  name: b2b-chat
+  name: server
   environment: dev
