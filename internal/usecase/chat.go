@@ -188,7 +188,7 @@ func (c *chat) SendMessage(ctx context.Context, message entity.Message, userName
 				return errUserNotFound
 			}
 
-			c.distributeMessage(message, chatroom.GetSubscribers())
+			c.distributeMessage(ctx, message, chatroom.GetSubscribers())
 		}
 
 		return nil
@@ -237,17 +237,30 @@ func (c *chat) isUserConnected(user string) chan entity.Message {
 	return ch
 }
 
-func (c *chat) distributeMessage(msg entity.Message, subscribers []string) {
+func (c *chat) distributeMessage(ctx context.Context, msg entity.Message, subscribers []string) {
 	wg := &sync.WaitGroup{}
-	for _, subscriber := range subscribers {
-		wg.Add(1)
-		go func(subscriber string) {
-			ch, ok := c.connPipe[subscriber]
-			if !ok {
-				c.log.Error("failed to send message", zap.String("subscriber", subscriber))
-			}
 
-			ch <- msg
-		}(subscriber)
+	for _, subscriber := range subscribers {
+		select {
+		case <-ctx.Done():
+			c.log.Info("context is done, exiting from message distribution")
+
+		default:
+			wg.Add(1)
+
+			go func(subscriber string) {
+				defer wg.Done()
+
+				ch, ok := c.connPipe[subscriber]
+				if !ok {
+					c.log.Error("failed to send message", zap.String("subscriber", subscriber))
+					return
+				}
+
+				ch <- msg
+			}(subscriber)
+		}
 	}
+
+	wg.Wait()
 }
