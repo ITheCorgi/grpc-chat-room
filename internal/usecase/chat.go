@@ -244,6 +244,7 @@ func (c *chat) distributeMessage(ctx context.Context, msg entity.Message, subscr
 		select {
 		case <-ctx.Done():
 			c.log.Info("context is done, exiting from message distribution")
+			return
 
 		default:
 			wg.Add(1)
@@ -262,5 +263,5 @@ func (c *chat) distributeMessage(ctx context.Context, msg entity.Message, subscr
 		}
 	}
 
-	wg.Wait()
+	go wg.Wait()
 }
